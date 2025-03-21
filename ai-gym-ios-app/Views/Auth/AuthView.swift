@@ -37,10 +37,12 @@ enum TrainingGoal: String, CaseIterable {
 // MARK: - Views
 struct AuthView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("isAuthenticated") private var isAuthenticated = false
+    @AppStorage(StorageKeys.isAuthenticated) private var isAuthenticated = false
+    @AppStorage(StorageKeys.accessToken) private var accessToken = ""
     
     @State private var currentStep = 0
     @State private var phone = ""
+    @State private var password = ""
     @State private var isLoading = false
     @State private var userProfile = UserProfile()
     @State private var showError = false
@@ -137,6 +139,19 @@ struct AuthView: View {
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(showError ? Color.red : Color.clear, lineWidth: 1)
             )
+            
+            // 添加密码输入框
+            HStack {
+                Image(systemName: "lock.fill")
+                    .foregroundColor(.gray)
+                    .padding(.leading)
+                
+                SecureField("请输入密码", text: $password)
+                    .textContentType(.password)
+                    .padding()
+            }
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
             
             if showError {
                 Text(errorMessage)
@@ -281,12 +296,39 @@ struct AuthView: View {
             return
         }
         
+        guard !password.isEmpty else {
+            showError = true
+            errorMessage = "请输入密码"
+            return
+        }
+        
         isLoading = true
         
-        // 模拟网络请求
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            isLoading = false
-            handleNext()
+        // 使用 async/await 进行网络请求
+        Task {
+            do {
+                let loginRequest = LoginRequest(phone: phone, password: password)
+                let response: LoginResponse = try await NetworkService.shared.request(
+                    endpoint: "/auth/login",
+                    method: .post,
+                    body: loginRequest,
+                    requiresAuth: false
+                )
+                
+                await MainActor.run {
+                    // 使用相同的键名保存 token
+                    UserDefaults.standard.set(response.access_token, forKey: StorageKeys.accessToken)
+                    accessToken = response.access_token
+                    isLoading = false
+                    handleNext()
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    showError = true
+                    errorMessage = handleError(error)
+                }
+            }
         }
     }
     
@@ -310,6 +352,28 @@ struct AuthView: View {
             isAuthenticated = true
             dismiss()
         }
+    }
+    
+    private func handleError(_ error: Error) -> String {
+        switch error {
+        case NetworkError.unauthorized:
+            return "用户名或密码错误"
+        case NetworkError.networkError:
+            return "网络连接错误"
+        case NetworkError.serverError(let message):
+            return "服务器错误: \(message)"
+        case NetworkError.decodingError:
+            return "数据解析错误"
+        default:
+            return "未知错误"
+        }
+    }
+    
+    func logout() {
+        UserDefaults.standard.removeObject(forKey: StorageKeys.accessToken)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.isAuthenticated)
+        isAuthenticated = false
+        accessToken = ""
     }
 }
 
@@ -340,6 +404,24 @@ struct NumberInputField: View {
             .cornerRadius(10)
         }
     }
+}
+
+// 添加响应模型
+private struct LoginResponse: Codable {
+    let access_token: String
+    let user: User
+    
+    struct User: Codable {
+        let id: String
+        let phone: String
+        let nickname: String
+    }
+}
+
+// 在 LoginResponse 之前添加以下代码
+private struct LoginRequest: Codable {
+    let phone: String
+    let password: String
 }
 
 #Preview {

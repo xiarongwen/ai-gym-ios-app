@@ -1,4 +1,5 @@
 import SwiftUI
+import SceneKit
 
 struct ExerciseItem: Identifiable {
     let id = UUID()
@@ -6,6 +7,8 @@ struct ExerciseItem: Identifiable {
     let reps: String
     let sets: Int
 }
+
+
 
 struct TrainingView: View {
     @StateObject private var healthKitService = HealthKitService()
