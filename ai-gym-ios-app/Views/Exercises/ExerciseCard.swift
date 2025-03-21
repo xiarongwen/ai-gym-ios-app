@@ -6,15 +6,34 @@ struct ExerciseCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 图片
-            AsyncImage(url: URL(string: exercise.gifUrl)) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+            let imageUrl = exercise.gifUrl
+         
+
+            AsyncImage(url: URL(string: imageUrl)) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(height: 200)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 200)
+                        .cornerRadius(10)
+                case .failure(let error):
+                    VStack {
+                        Image(systemName: "photo")
+                            .font(.largeTitle)
+                        Text("加载失败")
+                            .font(.caption)
+                        Text(error.localizedDescription)
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
                     .frame(height: 200)
-                    .cornerRadius(10)
-            } placeholder: {
-                ProgressView()
-                    .frame(height: 200)
+                @unknown default:
+                    EmptyView()
+                }
             }
             
             // 动作信息
